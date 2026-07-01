@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Agent — smallest.ai</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #09090b;
+      --surface: #18181b;
+      --surface2: #27272a;
+      --border: #3f3f46;
+      --text: #f4f4f5;
+      --muted: #71717a;
+      --purple: #a855f7;
+      --purple-hover: #c084fc;
+      --green: #22c55e;
+      --green-bg: #052e16;
+      --red: #ef4444;
+      --red-bg: #450a0a;
+      --blue: #38bdf8;
+      --orange: #f97316;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .layout { display: flex; min-height: 100vh; }
+
+    /* -- sidebar -- */
+    .sidebar {
+      width: 380px; min-width: 380px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 32px 28px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; }
+    .dot.online { background: var(--green); }
+    .dot.offline { background: var(--muted); }
+    .brand h1 { font-size: 18px; font-weight: 600; }
+    .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+
+    .field { margin-bottom: 20px; }
+    .field label {
+      display: block; font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+      border-radius: 10px; background: var(--bg); color: var(--text);
+      font-size: 15px; outline: none; transition: border-color 0.2s;
+    }
+    .field input:focus { border-color: var(--purple); }
+
+    .actions { display: flex; gap: 10px; margin-bottom: 28px; }
+    .btn {
+      flex: 1; padding: 12px; border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s; display: flex; align-items: center;
+      justify-content: center; gap: 6px;
+    }
+    .btn-call { background: var(--purple); color: #fff; }
+    .btn-call:hover { background: var(--purple-hover); }
+    .btn-call:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+    .btn-end { background: var(--red-bg); color: var(--red); }
+    .btn-end:hover { background: #7f1d1d; }
+    .btn-end:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .status-dot.idle { background: var(--muted); }
+    .status-dot.connecting { background: var(--orange); animation: pulse 1s infinite; }
+    .status-dot.active { background: var(--green); animation: pulse 1.2s infinite; }
+    .status-dot.ended { background: var(--muted); }
+    .status-dot.error { background: var(--red); }
+
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .status-text { font-size: 13px; color: var(--muted); }
+
+    .call-card {
+      background: var(--bg); border-radius: 10px; padding: 14px;
+      border: 1px solid var(--border); display: none; margin-bottom: 16px;
+    }
+    .call-card.visible { display: block; }
+    .call-card .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+    .call-card .label { color: var(--muted); }
+    .call-card .value { color: var(--text); font-family: 'SF Mono', monospace; font-size: 11px; word-break: break-all; }
+
+    .log-card {
+      background: var(--bg); border-radius: 10px; border: 1px solid var(--border);
+      padding: 12px; margin-bottom: 16px; flex: 1; display: none;
+      flex-direction: column; min-height: 0;
+    }
+    .log-card.visible { display: flex; }
+
+    .log-card h3 {
+      font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.8px; margin-bottom: 8px; flex-shrink: 0;
+    }
+
+    .history-list {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .history-list:empty::after {
+      content: 'No calls yet. Place a call to get started.';
+      color: var(--muted); font-size: 12px; padding: 16px 0;
+    }
+
+    .history-call {
+      padding: 10px 12px; border-radius: 8px; cursor: pointer;
+      border: 1px solid transparent; transition: all 0.15s;
+    }
+    .history-call:hover { background: var(--surface2); }
+    .history-call.active { border-color: var(--purple); background: #1a0a2e; }
+
+    .history-call .top { display: flex; justify-content: space-between; align-items: center; }
+    .history-call .phone { font-size: 13px; font-weight: 500; }
+    .history-call .time { font-size: 11px; color: var(--muted); }
+    .history-call .status { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* -- main transcript view -- */
+    .main {
+      flex: 1; display: flex; flex-direction: column;
+      background: var(--bg); position: relative;
+    }
+
+    .main-header {
+      padding: 20px 28px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .main-header h2 { font-size: 16px; font-weight: 600; }
+    .main-header .timer { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; color: var(--muted); gap: 12px;
+    }
+    .empty-state .icon { font-size: 48px; opacity: 0.3; }
+    .empty-state p { font-size: 14px; max-width: 300px; text-align: center; line-height: 1.6; }
+
+    .transcript-container {
+      flex: 1; overflow-y: auto; padding: 24px 28px;
+      display: none; flex-direction: column; gap: 16px;
+    }
+    .transcript-container.visible { display: flex; }
+
+    .msg {
+      display: flex; gap: 10px; max-width: 85%; animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .msg.user .bubble { background: var(--purple); color: #fff; border-bottom-right-radius: 4px; }
+    .msg.agent .bubble { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .msg.status { align-self: center; }
+
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 600;
+    }
+    .avatar.user { background: #2e1065; color: var(--purple-hover); }
+    .avatar.agent { background: var(--surface2); color: var(--text); }
+
+    .bubble-content { display: flex; flex-direction: column; gap: 2px; }
+    .bubble-sender { font-size: 11px; font-weight: 600; opacity: 0.7; }
+    .bubble {
+      padding: 10px 14px; border-radius: 14px; font-size: 14px;
+      line-height: 1.5; word-break: break-word;
+    }
+
+    .status-msg {
+      font-size: 12px; color: var(--muted); font-style: italic;
+      padding: 2px 0;
+    }
+
+    .typing-indicator { display: none; align-self: flex-start; margin-left: 42px; }
+    .typing-indicator.visible { display: flex; }
+    .typing-dots {
+      display: flex; gap: 4px; padding: 10px 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; border-bottom-left-radius: 4px;
+    }
+    .typing-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
+      animation: bounce 1.4s infinite ease-in-out;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
+
+    .footer {
+      text-align: center; padding: 12px; font-size: 11px; color: var(--muted);
+      border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .footer span { color: var(--text); }
+
+    /* responsive */
+    @media (max-width: 768px) {
+      .layout { flex-direction: column; }
+      .sidebar { width: 100%; min-width: unset; padding: 20px; border-right: none; border-bottom: 1px solid var(--border); }
+      .main-header { padding: 14px 20px; }
+      .transcript-container { padding: 16px; }
+      .msg { max-width: 92%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- === sidebar === -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="dot online" id="svcDot"></div>
+      <h1>Voice Agent</h1>
+    </div>
+    <p class="subtitle">Real-time outbound calling with smallest.ai</p>
+
+    <div class="field">
+      <label>Phone number</label>
+      <input type="tel" id="phone" placeholder="+1234567890" autofocus>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-call" id="btnCall" onclick="placeCall()">Call</button>
+      <button class="btn btn-end" id="btnEnd" onclick="endCall()" disabled>End</button>
+    </div>
+
+    <div class="status-row">
+      <div class="status-dot idle" id="statusDot"></div>
+      <span class="status-text" id="statusText">Ready</span>
+    </div>
+
+    <div class="call-card" id="callCard">
+      <div class="row"><span class="label">Call SID</span><span class="value" id="callSid">—</span></div>
+      <div class="row"><span class="label">Duration</span><span class="value" id="callDuration">—</span></div>
+      <div class="row"><span class="label">To</span><span class="value" id="callTo">—</span></div>
+      <div class="row"><span class="label">Status</span><span class="value" id="callStatus">—</span></div>
+    </div>
+
+    <div class="log-card" id="historyCard">
+      <h3>Call History</h3>
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </aside>
+
+  <!-- === main transcript view === -->
+  <main class="main">
+    <div class="main-header" id="mainHeader">
+      <h2 id="callTitle">No active call</h2>
+      <span class="timer" id="callTimer"></span>
+    </div>
+
+    <div class="empty-state" id="emptyState">
+      <div class="icon">&#9742;</div>
+      <p>Enter a phone number and click <strong>Call</strong> to start a conversation. Transcripts will appear here in real-time.</p>
+    </div>
+
+    <div class="transcript-container" id="transcriptContainer"></div>
+
+    <div class="typing-indicator" id="typingIndicator">
+      <div class="typing-dots">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Powered by <span>smallest.ai</span> Lightning TTS · Pulse STT · OpenAI
+    </div>
+  </main>
+</div>
+
+<script>
+(function() {
+  // -- state --
+  let currentCallSid = null;
+  let currentExecId = null;
+  let currentPhone = null;
+  let timerInterval = null;
+  let callStartTime = null;
+  let eventSource = null;
+  let callHistory = {};   // exec_id -> { phone, sid, status, events, startTime }
+
+  // -- DOM refs --
+  const $ = id => document.getElementById(id);
+  const el = {
+    phone: $('phone'),
+    btnCall: $('btnCall'),
+    btnEnd: $('btnEnd'),
+    statusDot: $('statusDot'),
+    statusText: $('statusText'),
+    callCard: $('callCard'),
+    callSid: $('callSid'),
+    callDuration: $('callDuration'),
+    callTo: $('callTo'),
+    callStatus: $('callStatus'),
+    callTitle: $('callTitle'),
+    callTimer: $('callTimer'),
+    emptyState: $('emptyState'),
+    transcript: $('transcriptContainer'),
+    typing: $('typingIndicator'),
+    historyList: $('historyList'),
+    historyCard: $('historyCard'),
+  };
+
+  // -- helper: set status indicator --
+  function setStatus(state, text) {
+    el.statusDot.className = 'status-dot ' + state;
+    el.statusText.textContent = text;
+  }
+
+  // -- helper: timer --
+  function startTimer() {
+    callStartTime = Date.now();
+    updateTimer();
+    timerInterval = setInterval(updateTimer, 1000);
+  }
+
+  function stopTimer() {
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    callStartTime = null;
+  }
+
+  function updateTimer() {
+    if (!callStartTime) return;
+    const secs = Math.floor((Date.now() - callStartTime) / 1000);
+    const m = String(Math.floor(secs / 60)).padStart(2, '0');
+    const s = String(secs % 60).padStart(2, '0');
+    const t = m + ':' + s;
+    el.callDuration.textContent = t;
+    el.callTimer.textContent = t;
+  }
+
+  // -- helper: transcript messages --
+  function addTranscript(role, text, sender) {
+    el.emptyState.style.display = 'none';
+    el.transcript.classList.add('visible');
+
+    const div = document.createElement('div');
+    div.className = 'msg ' + role;
+
+    let avatarHtml = '';
+    if (role === 'user') {
+      avatarHtml = '<div class="avatar user">Y</div>';
+    } else if (role === 'agent') {
+      avatarHtml = '<div class="avatar agent">A</div>';
+    }
+
+    div.innerHTML = avatarHtml +
+      '<div class="bubble-content">' +
+        '<span class="bubble-sender">' + (sender || '') + '</span>' +
+        '<div class="bubble">' + escapeHtml(text) + '</div>' +
+      '</div>';
+
+    el.transcript.appendChild(div);
+    el.transcript.scrollTop = el.transcript.scrollHeight;
+  }
+
+  function addStatusMsg(text) {
+    el.emptyState.style.display = 'none';
+    el.transcript.classList.add('visible');
+
+    const div = document.createElement('div');
+    div.className = 'status-msg';
+    div.textContent = text;
+    el.transcript.appendChild(div);
+    el.transcript.scrollTop = el.transcript.scrollHeight;
+  }
+
+  function showTyping(visible) {
+    if (visible) {
+      el.typing.classList.add('visible');
+    } else {
+      el.typing.classList.remove('visible');
+    }
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // -- helper: call history --
+  function addHistoryEntry(execId, phone, sid) {
+    callHistory[execId] = {
+      phone: phone,
+      sid: sid,
+      status: 'dialing',
+      startTime: Date.now(),
+    };
+    renderHistory();
+  }
+
+  function updateHistoryEntry(execId, updates) {
+    if (callHistory[execId]) {
+      Object.assign(callHistory[execId], updates);
+    }
+    renderHistory();
+  }
+
+  function renderHistory() {
+    el.historyCard.classList.add('visible');
+    const entries = Object.entries(callHistory).reverse();
+    el.historyList.innerHTML = entries.map(([id, h]) => {
+      const activeCls = id === currentExecId ? ' active' : '';
+      const time = new Date(h.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return '<div class="history-call' + activeCls + '" onclick="selectCall(\'' + id + '\')">'
+        + '<div class="top"><span class="phone">' + escapeHtml(h.phone) + '</span><span class="time">' + time + '</span></div>'
+        + '<div class="status">' + h.status + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  window.selectCall = function(execId) {
+    // Re-show transcript for a past call
+    stopTimer();
+    if (eventSource) { eventSource.close(); eventSource = null; }
+
+    currentExecId = execId;
+    const h = callHistory[execId];
+    if (!h) return;
+
+    currentCallSid = h.sid;
+    currentPhone = h.phone;
+
+    el.transcript.innerHTML = '';
+    el.transcript.classList.add('visible');
+    el.emptyState.style.display = 'none';
+    el.callTitle.textContent = h.phone || 'Call';
+    el.callCard.classList.add('visible');
+    el.callSid.textContent = h.sid || '—';
+    el.callTo.textContent = h.phone || '—';
+    el.callStatus.textContent = h.status || '—';
+
+    // Replay stored events as transcript
+    if (h._messages) {
+      h._messages.forEach(([role, text, sender]) => addTranscript(role, text, sender));
+    }
+
+    setStatus(h.status === 'active' ? 'active' : 'ended', h.status);
+    el.btnCall.disabled = false;
+    el.btnCall.textContent = 'Call';
+    el.btnEnd.disabled = true;
+    el.callTimer.textContent = h.duration || '—';
+
+    renderHistory();
+  };
+
+  // -- SSE connection --
+  function connectSSE(execId) {
+    if (eventSource) { eventSource.close(); }
+
+    eventSource = new EventSource('/events/' + execId);
+
+    const msgs = [];
+
+    eventSource.onmessage = function(e) {
+      const data = JSON.parse(e.data);
+      msgs.push(data);
+      handleSSEEvent(data, msgs);
+    };
+
+    eventSource.onerror = function() {
+      // SSE will auto-reconnect; if the server closes the stream gracefully,
+      // this fires once. We'll try to reconnect briefly.
+      if (eventSource.readyState === EventSource.CLOSED) {
+        console.log('SSE closed');
+      }
+    };
+
+    // Store for cleanup
+    eventSource._execId = execId;
+  }
+
+  function handleSSEEvent(data, msgs) {
+    switch (data.type) {
+      case 'call_connected':
+        setStatus('active', 'Connected');
+        startTimer();
+        updateHistoryEntry(currentExecId, { status: 'active' });
+        addStatusMsg('Call connected');
+        el.callStatus.textContent = 'connected';
+        el.btnEnd.disabled = false;
+        el.btnCall.disabled = true;
+        el.btnCall.textContent = 'In call...';
+        el.emptyState.style.display = 'none';
+        el.transcript.classList.add('visible');
+        break;
+
+      case 'user_transcript':
+        addTranscript('user', data.text, 'You');
+        updateHistoryEntry(currentExecId, { status: 'active' });
+        break;
+
+      case 'agent_thinking':
+        showTyping(true);
+        break;
+
+      case 'agent_response':
+        showTyping(false);
+        // The text will appear when agent_speaking fires
+        // Store for the next agent_speaking event
+        break;
+
+      case 'agent_speaking':
+        showTyping(false);
+        addTranscript('agent', data.text, 'Agent');
+        break;
+
+      case 'agent_done':
+        // Agent finished speaking
+        break;
+
+      case 'call_ended':
+        setStatus('ended', 'Call ended');
+        stopTimer();
+        updateHistoryEntry(currentExecId, { status: 'ended', duration: el.callDuration.textContent });
+        addStatusMsg('Call ended · Duration: ' + el.callDuration.textContent);
+        el.callStatus.textContent = 'completed';
+        el.btnCall.disabled = false;
+        el.btnCall.textContent = 'Call';
+        el.btnEnd.disabled = true;
+        break;
+
+      case 'call_status':
+        if (data.status) {
+          if (data.status === 'completed' || data.status === 'busy' || data.status === 'failed' || data.status === 'no-answer') {
+            stopTimer();
+            updateHistoryEntry(currentExecId, { status: data.status, duration: el.callDuration.textContent });
+            setStatus('ended', 'Call ' + data.status);
+            el.callStatus.textContent = data.status;
+            el.btnCall.disabled = false;
+            el.btnCall.textContent = 'Call';
+            el.btnEnd.disabled = true;
+          }
+          if (data.duration) {
+            el.callDuration.textContent = data.duration;
+          }
+        }
+        break;
+
+      case 'error':
+        setStatus('error', data.text || 'Error');
+        break;
+    }
+
+    // Store messages in history
+    if (currentExecId && callHistory[currentExecId]) {
+      callHistory[currentExecId]._messages = msgs;
+    }
+  }
+
+  // -- API calls --
+  async function placeCall() {
+    const phone = el.phone.value.trim();
+    if (!phone) return;
+
+    // Disconnect any active SSE
+    if (eventSource) { eventSource.close(); eventSource = null; }
+
+    stopTimer();
+
+    el.btnCall.disabled = true;
+    el.btnCall.textContent = 'Calling...';
+    el.btnEnd.disabled = true;
+    setStatus('connecting', 'Placing call...');
+    el.transcript.innerHTML = '';
+    el.transcript.classList.remove('visible');
+    el.emptyState.style.display = 'flex';
+    el.typing.classList.remove('visible');
+
+    try {
+      const resp = await fetch('/call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone_number: phone }),
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) {
+        setStatus('error', data.detail || 'Call failed');
+        el.btnCall.disabled = false;
+        el.btnCall.textContent = 'Call';
+        return;
+      }
+
+      // Set up call state
+      currentCallSid = data.call_sid;
+      currentExecId = data.execution_id;
+      currentPhone = phone;
+
+      el.callCard.classList.add('visible');
+      el.callSid.textContent = data.call_sid;
+      el.callTo.textContent = phone;
+      el.callStatus.textContent = data.status;
+      el.callTitle.textContent = phone;
+
+      addHistoryEntry(data.execution_id, phone, data.call_sid);
+
+      // Connect SSE for real-time events
+      connectSSE(data.execution_id);
+
+    } catch (err) {
+      setStatus('error', err.message);
+      el.btnCall.disabled = false;
+      el.btnCall.textContent = 'Call';
+    }
+  }
+
+  async function endCall() {
+    el.btnEnd.disabled = true;
+    stopTimer();
+
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+
+    setStatus('idle', 'Ready');
+    el.callStatus.textContent = 'ended';
+    el.btnCall.disabled = false;
+    el.btnCall.textContent = 'Call';
+
+    if (currentExecId && callHistory[currentExecId]) {
+      updateHistoryEntry(currentExecId, { status: 'ended', duration: el.callDuration.textContent });
+    }
+  }
+
+  // -- keyboard shortcut --
+  el.phone.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') placeCall();
+  });
+
+  // -- expose to window --
+  window.placeCall = placeCall;
+  window.endCall = endCall;
+
+})();
+</script>
+
+</body>
+</html>

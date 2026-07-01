@@ -1,0 +1,8 @@
+logs/
+output/
+*.pyc
+__pycache__/
+.env
+*.log
+*.raw
+*.wav

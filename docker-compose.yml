@@ -1,0 +1,25 @@
+services:
+  smallest-voice:
+    build: .
+    container_name: smallest-voice-agent
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8002}:${PORT:-8002}"
+    environment:
+      # Twilio
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
+      # Public URL for Twilio webhooks (Coolify domain, no ngrok needed)
+      - PUBLIC_URL=${PUBLIC_URL}
+      # smallest.ai
+      - SMALLEST_API_KEY=${SMALLEST_API_KEY}
+      # LLM
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=${PORT:-8002}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8002}/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
