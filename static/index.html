@@ -59,7 +59,7 @@
       border-radius: 10px; background: var(--bg); color: var(--text);
       font-size: 15px; outline: none; transition: border-color 0.2s;
     }
-    .field input:focus { border-color: var(--purple); }
+    .field input:focus, .field select:focus { border-color: var(--purple); }
 
     .actions { display: flex; gap: 10px; margin-bottom: 28px; }
     .btn {
@@ -234,6 +234,23 @@
     <div class="field">
       <label>Phone number</label>
       <input type="tel" id="phone" placeholder="+1234567890" autofocus>
+    </div>
+
+    <div class="field">
+      <label>TTS Model</label>
+      <select id="model" style="
+        width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+        border-radius: 10px; background: var(--bg); color: var(--text);
+        font-size: 15px; outline: none; cursor: pointer;
+        transition: border-color 0.2s; appearance: none;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2371717a%22 stroke-width=%222%22><path d=%22M6 9l6 6 6-6%22/></svg>');
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        padding-right: 36px;
+      ">
+        <option value="lightning_v3.1">Lightning v3.1</option>
+        <option value="lightning">Lightning</option>
+      </select>
     </div>
 
     <div class="actions">
@@ -588,10 +605,11 @@
     el.typing.classList.remove('visible');
 
     try {
+      const model = document.getElementById('model').value;
       const resp = await fetch('/call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number: phone }),
+        body: JSON.stringify({ phone_number: phone, model: model }),
       });
 
       const data = await resp.json();

@@ -18,7 +18,7 @@ import aiohttp
 
 logger = logging.getLogger("smallest.tts")
 
-API_URL = "https://api.smallest.ai/waves/v1/lightning-v3.1/get_speech"
+API_URL = "https://api.smallest.ai/waves/v1/tts"
 API_KEY = os.environ.get("SMALLEST_API_KEY", "sk_ec6425e0db7a3e4222eb81f7ab57fe68")
 
 
@@ -29,17 +29,19 @@ async def synthesize(
     sample_rate: int = 24000,
     speed: float = 1.0,
     language: str = "en",
+    model: str = "lightning_v3.1",
 ) -> bytes:
     """
-    Synthesize speech from text using smallest.ai Lightning v3.1.
+    Synthesize speech from text using smallest.ai TTS.
 
     Args:
         text: Text to synthesize.
         voice_id: Voice identifier (e.g. "sophia", "magnus", "olivia").
-        output_format: Audio format — "wav", "mp3", "pcm", "mulaw", "alaw".
+        output_format: Audio format — "wav", "mp3", "pcm", "ulaw", "alaw".
         sample_rate: Sample rate — 8000, 16000, 24000, or 44100.
         speed: Speech rate multiplier (0.5 to 2.0).
         language: Language code (e.g. "en", "hi", "es", "auto").
+        model: TTS model (e.g. "lightning_v3.1").
 
     Returns:
         Raw audio bytes in the requested format.
@@ -49,6 +51,7 @@ async def synthesize(
         "Content-Type": "application/json",
     }
     payload = {
+        "model": model,
         "text": text,
         "voice_id": voice_id,
         "output_format": output_format,

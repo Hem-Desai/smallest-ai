@@ -19,7 +19,7 @@ import aiohttp
 
 logger = logging.getLogger("smallest.stt")
 
-API_URL = "https://api.smallest.ai/waves/v1/pulse/get_text"
+API_URL = "https://api.smallest.ai/waves/v1/stt"
 API_KEY = os.environ.get("SMALLEST_API_KEY", "sk_ec6425e0db7a3e4222eb81f7ab57fe68")
 
 
@@ -43,6 +43,7 @@ async def transcribe(
     }
     params = {
         "language": language,
+        "model": "pulse",
     }
 
     logger.info(

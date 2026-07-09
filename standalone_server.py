@@ -138,6 +138,7 @@ async def index():
 
 class CallRequest(BaseModel):
     phone_number: str = Field(..., pattern=r"^\+[1-9]\d{1,14}$")
+    model: str = Field(default="lightning_v3.1", max_length=100)
 
 
 class CallResponse(BaseModel):
@@ -148,12 +149,18 @@ class CallResponse(BaseModel):
     media_url: str
 
 
+# -- per-execution config store ----------------------------------------------
+# Maps execution_id -> user-selected options (model, etc.)
+_execution_config: dict[str, dict] = {}
+
+
 # -- /call -------------------------------------------------------------------
 
 @app.post("/call", response_model=CallResponse)
 async def make_call(req: CallRequest):
     """Initiate an outbound Twilio call."""
     execution_id = str(uuid.uuid4())
+    _execution_config[execution_id] = {"model": req.model}
     public_url = get_public_url()
 
     twiml_url = f"{public_url}/twiml/{execution_id}"
@@ -275,7 +282,8 @@ async def media_stream(websocket: WebSocket, execution_id: str):
                         execution_id, msg_count,
                     )
                     message_data = json.loads(message)
-                    bridge = SmallestAiBridge(execution_id)
+                    model = _execution_config.get(execution_id, {}).get("model", "lightning_v3.1")
+                    bridge = SmallestAiBridge(execution_id, model=model)
                     await bridge.initialize(websocket)
                     bridge_task = asyncio.create_task(bridge.start_bridge())
                     logger.info(
@@ -313,6 +321,7 @@ async def media_stream(websocket: WebSocket, execution_id: str):
     finally:
         if bridge:
             await bridge.cleanup()
+        _execution_config.pop(execution_id, None)
         try:
             await websocket.close()
         except Exception:

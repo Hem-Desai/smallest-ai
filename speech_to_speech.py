@@ -51,8 +51,8 @@ from smallest_test.electron_llm import ElectronClient
 from smallest_test.event_store import event_store
 
 API_KEY = os.environ.get("SMALLEST_API_KEY", "sk_ec6425e0db7a3e4222eb81f7ab57fe68")
-STT_REST_URL = "https://api.smallest.ai/waves/v1/pulse/get_text"
-LIGHTNING_WS_URL = "wss://api.smallest.ai/waves/v1/lightning-v3.1/get_speech/stream"
+STT_REST_URL = "https://api.smallest.ai/waves/v1/stt"
+LIGHTNING_WS_URL = "wss://api.smallest.ai/waves/v1/tts/live"
 
 # Audio format constants
 TWILIO_SAMPLE_RATE = 8000
@@ -110,9 +110,10 @@ class SmallestAiBridge:
     - TTS returns mu-law audio bytes → base64-encoded → sent back to Twilio.
     """
 
-    def __init__(self, execution_id: str, response_text: str | None = None):
+    def __init__(self, execution_id: str, response_text: str | None = None, model: str = "lightning_v3.1"):
         self.execution_id = execution_id
         self.bridge_id = str(uuid.uuid4())[:8]
+        self.tts_model = model
         # Only use canned response if no LLM is available (fallback)
         self._fallback_text = response_text or (
             "I received your message through the smallest AI real time pipeline."
@@ -264,7 +265,7 @@ class SmallestAiBridge:
             "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "audio/wav",
         }
-        params = {"language": "en"}
+        params = {"language": "en", "model": "pulse"}
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -427,6 +428,7 @@ class SmallestAiBridge:
             return
 
         payload = {
+            "model": self.tts_model,
             "text": text,
             "voice_id": "sophia",
             "sample_rate": TWILIO_SAMPLE_RATE,
