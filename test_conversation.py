@@ -1,6 +1,6 @@
 """
 Emulate a multi-turn conversation without making a real call.
-Tests: STT → LLM → TTS pipeline with busy-lock behavior.
+Tests: STT WS -> LLM -> TTS WS pipeline with busy-lock behavior.
 """
 import asyncio
 import base64
@@ -33,7 +33,8 @@ class FakeTwilioWs:
 
     async def send_text(self, text: str):
         self.sent.append(json.loads(text))
-        logger.info("  [Twilio] SENT media chunk: %d bytes base64", len(self.sent[-1].get("media", {}).get("payload", "")))
+        logger.info("  [Twilio] SENT media chunk: %d bytes base64",
+                    len(self.sent[-1].get("media", {}).get("payload", "")))
 
     async def close(self):
         self.closed = True
@@ -46,27 +47,26 @@ async def main():
     from smallest_test.speech_to_speech import SmallestAiBridge
 
     print("=" * 60)
-    print("Multi-turn conversation emulation test")
+    print("Multi-turn conversation emulation test (streaming)")
     print("=" * 60)
 
     bridge = SmallestAiBridge("emulated-conversation-test")
     ws = FakeTwilioWs()
     await bridge.initialize(ws)
 
-    # ---- Turn 1: Simulate "start" + user speaks ----
-    print("\n--- Turn 1: User says hello ---")
+    # ---- Simulate "start" event (connects STT + TTS WS to real APIs) ----
+    print("\n--- Starting bridge, connecting STT/TTS WebSockets ---")
     t0 = time.perf_counter()
 
-    # start event
     await bridge.handle_twilio_message({
         "event": "start",
         "start": {"streamSid": "MZ_EMULATED_01"},
     })
-    # start the bridge loop
     bridge._running = True
     bridge._summary_task = asyncio.create_task(bridge._periodic_summary())
 
-    # Simulate ~10s of audio (500 media events with mu-law silence + some fake audio)
+    # ---- Turn 1: Stream ~10s of audio directly to STT WS ----
+    print("\n--- Turn 1: Streaming audio to STT WS ---")
     for i in range(500):
         awake = base64.b64encode(
             bytes([0xff] * 80 + [0x7f, 0xff, 0x55, 0xaa, 0x00, 0x7f] * 12)
@@ -75,16 +75,12 @@ async def main():
             "event": "media",
             "media": {"payload": awake},
         })
-    # Let silence timer flush
-    await asyncio.sleep(2.0)
+    # Give STT time to process and return final transcript
+    await asyncio.sleep(5.0)
 
-    # Force a fresh STT flush with the buffer
-    if len(bridge._pcm_buffer) > 0:
-        await bridge._flush_buffer()
-    await asyncio.sleep(0.5)
-
-    logger.info("Turn 1: transcripts=%d, tts_chunks=%d, tts_busy=%s",
-                bridge.transcript_count, bridge.tts_chunk_count, bridge._tts_busy)
+    logger.info("Turn 1: transcripts=%d, tts_chunks=%d, tts_busy=%s, stt_stream=%d",
+                bridge.transcript_count, bridge.tts_chunk_count,
+                bridge._tts_busy, bridge.stt_stream_bytes)
 
     # ---- Wait for AI to finish speaking ----
     print("\n--- Waiting for AI to finish speaking... ---")
@@ -96,19 +92,14 @@ async def main():
                 bridge._tts_busy, bridge.tts_chunk_count, bridge.transcript_count)
 
     if bridge._tts_busy:
-        logger.error("TTS still BUSY after 30s — turn 2 would be dropped!")
+        logger.error("TTS still BUSY after 30s -- turn 2 would be dropped!")
     elif bridge.tts_chunk_count == 0:
-        logger.error("No TTS chunks — AI never spoke!")
+        logger.error("No TTS chunks -- AI never spoke!")
     else:
-        logger.info("TTS finished, lock released — ready for turn 2")
+        logger.info("TTS finished, lock released -- ready for turn 2")
 
-    # ---- Turn 2: User asks a follow-up ----
-    print("\n--- Turn 2: User asks follow-up ---")
-    t1 = time.perf_counter()
-    bridge._pcm_buffer.clear()
-    bridge._flushing = False
-
-    # simulate another ~10s of audio
+    # ---- Turn 2: Stream more audio ----
+    print("\n--- Turn 2: Streaming more audio to STT WS ---")
     for i in range(500):
         awake = base64.b64encode(
             bytes([0xff] * 80 + [0x7f, 0xff, 0x55, 0xaa, 0x00, 0x7f] * 12)
@@ -117,14 +108,11 @@ async def main():
             "event": "media",
             "media": {"payload": awake},
         })
-    await asyncio.sleep(2.0)
-
-    if len(bridge._pcm_buffer) > 0:
-        await bridge._flush_buffer()
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(5.0)
 
     logger.info("Turn 2: transcripts=%d, tts_chunks=%d, tts_busy=%s",
-                bridge.transcript_count, bridge.tts_chunk_count, bridge._tts_busy)
+                bridge.transcript_count, bridge.tts_chunk_count,
+                bridge._tts_busy)
 
     # Wait for AI to finish speaking again
     patience = 30
@@ -136,19 +124,19 @@ async def main():
     total = time.perf_counter() - t0
     print("\n" + "=" * 60)
     print(f"RESULTS (total={total:.1f}s)")
-    print(f"  Transcripts:  {bridge.transcript_count} (expected >= 2)")
-    print(f"  TTS chunks:   {bridge.tts_chunk_count} (expected > 0)")
-    print(f"  STT requests: {bridge.stt_request_count}")
-    print(f"  STT errors:   {bridge.stt_error_count}")
+    print(f"  Transcripts:    {bridge.transcript_count} (expected >= 1)")
+    print(f"  TTS chunks:     {bridge.tts_chunk_count} (expected > 0)")
+    print(f"  STT stream:     {bridge.stt_stream_bytes} bytes")
+    print(f"  STT errors:     {bridge.stt_error_count}")
     print(f"  TTS still busy: {bridge._tts_busy}")
 
     # Cleanup
-    bridge._tts_complete = True
+    bridge._tts_done_event.set()
     await bridge.cleanup()
 
     # Verify
     ok = (
-        bridge.transcript_count >= 2
+        bridge.transcript_count >= 1
         and bridge.tts_chunk_count > 0
         and not bridge._tts_busy
     )

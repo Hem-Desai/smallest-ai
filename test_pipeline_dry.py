@@ -46,7 +46,7 @@ async def synthesize_tts(text: str, label: str) -> tuple[bool, int]:
     import audioop
     import aiohttp
 
-    TTS_WS = "wss://api.smallest.ai/waves/v1/lightning-v3.1/get_speech/stream"
+    TTS_WS = "wss://api.smallest.ai/waves/v1/tts/live"
     API_KEY = "sk_ec6425e0db7a3e4222eb81f7ab57fe68"
 
     chunks = []

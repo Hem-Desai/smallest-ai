@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import time
-from typing import Dict, List
+from typing import AsyncGenerator, Dict, List
 
 import aiohttp
 
@@ -116,6 +116,65 @@ class ElectronClient:
             elapsed = time.perf_counter() - t0
             logger.exception("LLM unexpected error | duration=%.3fs", elapsed)
             return ""
+
+    async def stream_chunks(self, user_message: str, max_tokens: int = 256) -> AsyncGenerator[str, None]:
+        """Stream LLM response as text chunks via SSE. Yields content fragments."""
+        messages = [{"role": "system", "content": self.system_prompt}]
+        recent = self.conversation_history[-16:]
+        messages.extend(recent)
+        messages.append({"role": "user", "content": user_message})
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.7,
+            "stream": True,
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        t0 = time.perf_counter()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.base_url, json=payload, headers=headers) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        elapsed = time.perf_counter() - t0
+                        logger.error(
+                            "LLM stream error | status=%d | duration=%.3fs | body=%s",
+                            resp.status, elapsed, body[:300],
+                        )
+                        return
+
+                    async for line_raw in resp.content:
+                        line = line_raw.decode("utf-8").strip()
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data == "[DONE]":
+                            break
+                        try:
+                            obj = json.loads(data)
+                            delta = obj.get("choices", [{}])[0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                yield content
+                        except json.JSONDecodeError:
+                            continue
+
+        except aiohttp.ClientError as e:
+            elapsed = time.perf_counter() - t0
+            logger.error(
+                "LLM stream connection error | duration=%.3fs | error=%s: %s",
+                elapsed, type(e).__name__, e,
+            )
+        except Exception:
+            elapsed = time.perf_counter() - t0
+            logger.exception("LLM stream unexpected error | duration=%.3fs", elapsed)
 
     def reset(self) -> None:
         """Clear conversation history."""

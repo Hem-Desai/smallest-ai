@@ -11,7 +11,7 @@ from pathlib import Path
 import aiohttp
 
 API_KEY = "sk_ec6425e0db7a3e4222eb81f7ab57fe68"
-WS_URL = "wss://api.smallest.ai/waves/v1/lightning-v3.1/get_speech/stream"
+WS_URL = "wss://api.smallest.ai/waves/v1/tts/live"
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -80,7 +80,7 @@ async def test_tts_rest(label: str):
     print(f"Testing TTS REST: ulaw 8000")
     print(f"{'='*60}")
 
-    url = "https://api.smallest.ai/waves/v1/lightning-v3.1/get_speech"
+    url = "https://api.smallest.ai/waves/v1/tts"
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
